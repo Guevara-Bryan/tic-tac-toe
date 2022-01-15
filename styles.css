@@ -1,0 +1,27 @@
+*{
+    margin: 0px;
+    padding: 0px;
+    box-sizing: border-box;
+}
+
+.container{
+    background-color: antiquewhite;
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.board{
+    width: 300px;
+    height: 300px;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.cell{
+    width: 100px;
+    height: 100px;
+}
