@@ -4,6 +4,8 @@ let Gameboard = (function(){
     for(let i = 0; i < 9; i++){
         board.push({mark: "", arr_id: i});
     }
+
+    let locked = true;
     // Updates cells pointed to by "cell_id" and changes its mark
     function updateCell(cell_id, mark){
         board[cell_id].mark = mark;
@@ -54,13 +56,20 @@ let Gameboard = (function(){
         return full;
     }
 
+    function lock(){locked = true;}
+    function unlock(){locked = false;}
+    function isLocked(){const dummy = locked; return dummy;}
+
     return{
         updateCell,
         getBoardArray,
         getCell,
         hasWon,
         clear, 
-        isFull
+        isFull,
+        lock,
+        unlock,
+        isLocked
     }
 })();
 
@@ -86,21 +95,36 @@ let HTMLGenerator = (function(doc){
         return element;
     }
 
-    function generateSelect(options, selected=0){
+    // Allows you to create Select html objects with different values and text
+    // If text is not defined then the values are displayed by default.
+    function generateSelect(selected, values, text){
+        if(text === undefined){
+            text = values;
+        }
+
         const select = doc.createElement("select");
-        for(let i = 0; i < options.length; i++){
+        for(let i = 0; i < values.length; i++){
             if(i === selected){
-                select.innerHTML += `<option value=${options[i]} selected>${options[i]}</option>`
+                select.innerHTML += `<option value=${values[i]} selected>${text[i]}</option>`
+                continue;
             }
-            select.innerHTML += `<option value=${options[i]}>${options[i]}</option>`
+            select.innerHTML += `<option value=${values[i]}>${text[i]}</option>`
         }
         return select
+    }
+
+    function generateButton(text, value){
+        let button = doc.createElement("button");
+        button.textContent = text;
+        button.setAttribute("value", value);
+        return button;
     }
 
     return{
         generateBoard,
         generateH1,
-        generateSelect
+        generateSelect,
+        generateButton
     }
 })(document);
 
@@ -119,48 +143,103 @@ let ViewController = (function(doc){
 // Controlls the flow of the game (whose turn, winners, losers, ...).
 let GameController = (function(view, html, board){
 
-    const players = []; // 1 and 2 are players. 3 is the current player.
-
-    //
+    const players = Array(2); // 1 and 2 are players. 3 is the current player.
+    let current_player = 0;
     const html_board = html.generateBoard(board)
-    const player_marks = [html.generateSelect(["❌", "⭕️", "🦠", "💉"]),
-                          html.generateSelect(["❌", "⭕️", "🦠", "💉"], 1)] 
-    const info_sign = html.generateH1("Begin Game!");
+    const player_marks = [html.generateSelect(0, ["❌", "⭕️", "🦠", "💉"]),
+                          html.generateSelect(1, ["❌", "⭕️", "🦠", "💉"])];
+
+    const game_mode = html.generateSelect(0, ["pvp", "pva", "pvi"], ["Player vs. Player", "Player vs. AI", "Player vs. Unbeatable"]);
+    const info_sign = html.generateH1("SELECT GAME MODE");
+    const stop_start_button = html.generateButton("START", 0);
 
 
     // Makes a player object.
     function _makePlayer(name, mark){ 
-        return {name, mark, id: players.length}
+        return {name, mark};
     }
 
+    function _playerPlayRound(cell){
+        if(cell.textContent !== "" || board.isLocked()) return;
+        board.updateCell(cell.value, players[current_player].mark);
+        cell.textContent = players[current_player].mark;
+    }
+
+    function _aiPlayRound(){
+        if(board.isLocked()) return;
+        let selected_cell;
+        //Select an empty cell.
+        do{
+            selected_cell = _randomInt(0, 8);
+            console.log(`Computer selected cell: ${selected_cell}`);
+        }while(board.getCell(selected_cell).mark !== "");
+
+        board.updateCell(selected_cell, players[current_player].mark);
+        html_board.querySelectorAll(".cell")[selected_cell].textContent = players[current_player].mark;
+    }
+
+    function _evalRound(){
+        const result = board.hasWon(players[current_player]);
+        if(result){
+            info_sign.textContent = `${result.name} WON THE GAME!`;
+            board.lock();
+        }else if(board.isFull()){
+            info_sign.textContent = "IT'S A DRAW!";
+        }else{
+            current_player = (current_player + 1) % 2;
+            if (game_mode.value === "pvp"){
+                info_sign.textContent = `IT'S ${players[current_player].name}'S TURN.`;
+            }
+        }
+    }
+
+    function _randomInt(min, max) {
+        return Math.floor(Math.random() * (max - min + 1) + min);
+      }
+
     function init(){
-        players.push(_makePlayer(`Player ${player_marks[0].value}` , player_marks[0].value));
-        players.push(_makePlayer(`Player ${player_marks[1].value}` , player_marks[1].value));
-        players[2] = players[0];
-
-
+        //Add an event listener to every cell
         html_board.querySelectorAll(".cell").forEach(cell => {
             cell.addEventListener("click", ()=>{
-                if(cell.textContent !== "") return;
-                board.updateCell(cell.value, players[2].mark);
-                cell.textContent = players[2].mark;
+                _playerPlayRound(cell);
+                _evalRound();
 
-
-                players[2] = players[2].id == 0 ? players[1] : players[0];
-                
-                const result = board.hasWon(players[2])
-                if(result){
-                    info_sign.textContent = `${result.name} won the game!`;
-                    setTimeout(_endGame, 2000);
-                }else if(board.isFull()){
-                    info_sign.textContent = "It's a DRAW!";
-                    setTimeout(_endGame, 2000);
-                }else{
-                    info_sign.textContent = `It ${players[2].name}'s turn.`;
+                if(!board.isFull() && game_mode.value === "pva"){
+                    _aiPlayRound();
+                    _evalRound();
                 }
             });
         });
 
+        //Add event listener to stop-start-button
+        stop_start_button.addEventListener("click", ()=>{
+            if(stop_start_button.value === "0")
+            { // Game is about to start - lock the settings
+                board.unlock();
+
+                players[0] = _makePlayer(`Player ${player_marks[0].value}` , player_marks[0].value);
+                players[1] = _makePlayer(`Player ${player_marks[1].value}` , player_marks[1].value);
+                current_player = _randomInt(0, 1);
+                if(game_mode.value === "pva" && current_player === 1){
+                    _aiPlayRound();
+                    _evalRound();
+                }else{
+                    info_sign.textContent = "MAKE YOUR MOVE";
+                }
+
+                stop_start_button.textContent = "RESET";
+                stop_start_button.value = "1";
+                game_mode.setAttribute("disabled", true);
+                player_marks.forEach(mark => mark.setAttribute("disabled", true));
+            } 
+            else
+            { // Game is being restarted. enable settings.
+                board.lock();
+                _endGame();
+            }
+        });
+
+        //Add event listeners to the select tags
         for(let i = 0; i < 2; i++){
             player_marks[i].addEventListener("change", ()=>{
                 players[i].mark = player_marks[i].value;
@@ -168,20 +247,33 @@ let GameController = (function(view, html, board){
             });
         }
 
+        game_mode.addEventListener("change", ()=>{ console.log(game_mode.value); });
+
+        //Display game.
         view.displayHTML(".gameboard", html_board);
-        player_marks.forEach(mark_selector => {view.displayHTML(".settings", mark_selector)});
+        player_marks.forEach(mark_selector => { view.displayHTML(".settings", mark_selector); });
+        view.displayHTML(".settings", game_mode);
         view.displayHTML(".info", info_sign);
+        view.displayHTML(".game", stop_start_button);
     }
 
     function _endGame(){
-        info_sign.textContent = "Begin Game!"
+        board.lock();
+
+        info_sign.textContent = "SELECT GAME MODE"
         board.clear();
         html_board.querySelectorAll(".cell").forEach(cell => cell.textContent = "");
+
+
+        stop_start_button.textContent = "START";
+        stop_start_button.value = "0";
+        game_mode.removeAttribute("disabled");
+        player_marks.forEach(mark => mark.removeAttribute("disabled"));
     }
 
     return{ init }
 })(ViewController, HTMLGenerator, Gameboard);
 
-
+// ---------------------------------------- Exec ----------------------------------------
 
 GameController.init()
