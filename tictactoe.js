@@ -152,6 +152,7 @@ let GameController = (function(view, html, board){
     const game_mode = html.generateSelect(0, ["pvp", "pva", "pvi"], ["Player vs. Player", "Player vs. AI", "Player vs. Impossible"]);
     const info_sign = html.generateH1("SELECT GAME MODE");
     const stop_start_button = html.generateButton("START", 0);
+    let _aiPlayRound = null;
 
 
     // Makes a player object.
@@ -167,7 +168,7 @@ let GameController = (function(view, html, board){
         _evalRound();
     }
 
-    let _aiPlayRound = function(){
+    function simpleAI(){
         if(board.isLocked()) return;
         let selected_cell;
         //Select an empty cell.
@@ -233,6 +234,7 @@ let GameController = (function(view, html, board){
                     _aiPlayRound = imposibleAI;
                     _aiPlayRound();
                 } else if (game_mode.value === "pva"){
+                    _aiPlayRound = simpleAI;
                     _aiPlayRound();
                 } else {
                     info_sign.textContent = `It ${players[current_player].name}'s turn.`;
