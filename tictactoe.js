@@ -149,7 +149,7 @@ let GameController = (function(view, html, board){
     const player_marks = [html.generateSelect(0, ["❌", "⭕️", "🦠", "💉"]),
                           html.generateSelect(1, ["❌", "⭕️", "🦠", "💉"])];
 
-    const game_mode = html.generateSelect(0, ["pvp", "pva", "pvi"], ["Player vs. Player", "Player vs. AI", "Player vs. Unbeatable"]);
+    const game_mode = html.generateSelect(0, ["pvp", "pva", "pvi"], ["Player vs. Player", "Player vs. AI", "Player vs. Impossible"]);
     const info_sign = html.generateH1("SELECT GAME MODE");
     const stop_start_button = html.generateButton("START", 0);
 
@@ -163,9 +163,11 @@ let GameController = (function(view, html, board){
         if(cell.textContent !== "" || board.isLocked()) return;
         board.updateCell(cell.value, players[current_player].mark);
         cell.textContent = players[current_player].mark;
+
+        _evalRound();
     }
 
-    function _aiPlayRound(){
+    let _aiPlayRound = function(){
         if(board.isLocked()) return;
         let selected_cell;
         //Select an empty cell.
@@ -176,6 +178,14 @@ let GameController = (function(view, html, board){
 
         board.updateCell(selected_cell, players[current_player].mark);
         html_board.querySelectorAll(".cell")[selected_cell].textContent = players[current_player].mark;
+
+        _evalRound();
+    }
+
+    function imposibleAI(){
+        console.log("I am invinsible");
+
+        _evalRound();
     }
 
     function _evalRound(){
@@ -202,11 +212,9 @@ let GameController = (function(view, html, board){
         html_board.querySelectorAll(".cell").forEach(cell => {
             cell.addEventListener("click", ()=>{
                 _playerPlayRound(cell);
-                _evalRound();
 
-                if(!board.isFull() && game_mode.value === "pva"){
+                if(!board.isFull() && game_mode.value !== "pvp"){
                     _aiPlayRound();
-                    _evalRound();
                 }
             });
         });
@@ -220,11 +228,14 @@ let GameController = (function(view, html, board){
                 players[0] = _makePlayer(`Player ${player_marks[0].value}` , player_marks[0].value);
                 players[1] = _makePlayer(`Player ${player_marks[1].value}` , player_marks[1].value);
                 current_player = _randomInt(0, 1);
-                if(game_mode.value === "pva" && current_player === 1){
+
+                if(game_mode.value === "pvi"){
+                    _aiPlayRound = imposibleAI;
                     _aiPlayRound();
-                    _evalRound();
-                }else{
-                    info_sign.textContent = "MAKE YOUR MOVE";
+                } else if (game_mode.value === "pva"){
+                    _aiPlayRound();
+                } else {
+                    info_sign.textContent = `It ${players[current_player].name}'s turn.`;
                 }
 
                 stop_start_button.textContent = "RESET";
