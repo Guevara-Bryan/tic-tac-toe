@@ -18,25 +18,29 @@ let Gameboard = (function(){
 
     //returns a copy of the board.
     function getBoardArray(){
-        return [...board];
+        const cloned = [];
+        board.forEach(cell => {
+            cloned.push({mark: cell.mark, arr_id: cell.arr_id});
+        });
+        return cloned;
     }
 
-    function hasWon(player){
+    function hasWon(board_state, player){
         //check rows
         for(let i = 0; i <= 6; i+=3){
-            if(board[i].mark !== player.mark) continue;
-            if(board[i].mark === board[i + 1].mark && board[i + 1].mark === board[i + 2].mark) return player;
+            if(board_state[i].mark !== player.mark) continue;
+            if(board_state[i].mark === board_state[i + 1].mark && board_state[i + 1].mark === board_state[i + 2].mark) return player;
         }
 
         //Check columns
         for(let i = 0; i < 3; i++){
-            if(board[i].mark !== player.mark) continue;
-            if(board[i].mark === board[i + 3].mark && board[i + 3].mark === board[i + 6].mark) return player;
+            if(board_state[i].mark !== player.mark) continue;
+            if(board_state[i].mark === board_state[i + 3].mark && board_state[i + 3].mark === board_state[i + 6].mark) return player;
         }
 
         //Check for diagonals
-        if(board[0].mark === player.mark && board[0].mark === board[4].mark && board[4].mark === board[8].mark) return player;
-        if(board[2].mark === player.mark && board[2].mark === board[4].mark && board[4].mark === board[6].mark) return player;
+        if(board_state[0].mark === player.mark && board_state[0].mark === board_state[4].mark && board_state[4].mark === board_state[8].mark) return player;
+        if(board_state[2].mark === player.mark && board_state[2].mark === board_state[4].mark && board_state[4].mark === board_state[6].mark) return player;
 
         //No one won
         return null;
@@ -143,7 +147,7 @@ let ViewController = (function(doc){
 // Controlls the flow of the game (whose turn, winners, losers, ...).
 let GameController = (function(view, html, board){
 
-    const players = Array(2); // 1 and 2 are players. 3 is the current player.
+    const players = Array(2); // 1 and 2 are players.
     let current_player = 0;
     const html_board = html.generateBoard(board)
     const player_marks = [html.generateSelect(0, ["❌", "⭕️", "🦠", "💉"]),
@@ -161,15 +165,13 @@ let GameController = (function(view, html, board){
     }
 
     function _playerPlayRound(cell){
-        if(cell.textContent !== "" || board.isLocked()) return;
         board.updateCell(cell.value, players[current_player].mark);
         cell.textContent = players[current_player].mark;
 
         _evalRound();
     }
 
-    function simpleAI(){
-        if(board.isLocked()) return;
+    function _simpleAI(){
         let selected_cell;
         //Select an empty cell.
         do{
@@ -183,19 +185,71 @@ let GameController = (function(view, html, board){
         _evalRound();
     }
 
-    function imposibleAI(){
-        console.log("I am invinsible");
+    function _imposibleAI(){
+        function minimax(state, is_maximizing){
+            if(board.hasWon(state, players[1])){
+                return 1;
+            }else if (board.hasWon(state, players[0])){
+                return -1;
+            } else if(state.filter(item => item.mark === "").length === 0) { 
+                return 0;
+            }
 
+            if(is_maximizing){
+                let bestScore = -Infinity;
+                for(let i = 0; i < state.length; i++){
+                    if(state[i].mark === ""){
+                        state[i].mark = players[1].mark;
+                        const score = minimax(state, false);
+                        state[i].mark = "";
+                        bestScore = Math.max(score, bestScore);
+                    }
+                }
+
+                return bestScore;
+            } else {
+                let bestScore = Infinity;
+                for(let i = 0; i < state.length; i++){
+                    if(state[i].mark === ""){
+                        state[i].mark = players[0].mark;
+                        const score = minimax(state, true);
+                        state[i].mark = "";
+                        bestScore = Math.min(score, bestScore);
+                    }
+                }
+
+                return bestScore;
+            }
+        }
+        const current_state = board.getBoardArray();
+        let bestScore = -Infinity;
+        let best_choice;
+
+        for(let i = 0; i < current_state.length; i++){
+            if(current_state[i].mark === ""){
+                current_state[i].mark = players[1].mark;
+                const score = minimax(current_state, false);
+                current_state[i].mark = "";
+                if(score > bestScore){
+                    bestScore = score;
+                    best_choice = i;
+                }
+            }
+        }
+
+        board.updateCell(best_choice, players[current_player].mark);
+        html_board.querySelectorAll(".cell")[best_choice].textContent = players[current_player].mark;
         _evalRound();
     }
 
     function _evalRound(){
-        const result = board.hasWon(players[current_player]);
+        const result = board.hasWon(board.getBoardArray(), players[current_player]);
         if(result){
             info_sign.textContent = `${result.name} WON THE GAME!`;
             board.lock();
         }else if(board.isFull()){
             info_sign.textContent = "IT'S A DRAW!";
+            board.lock();
         }else{
             current_player = (current_player + 1) % 2;
             if (game_mode.value === "pvp"){
@@ -212,9 +266,11 @@ let GameController = (function(view, html, board){
         //Add an event listener to every cell
         html_board.querySelectorAll(".cell").forEach(cell => {
             cell.addEventListener("click", ()=>{
+                if(board.isLocked() || cell.textContent !== "") return;
+
                 _playerPlayRound(cell);
 
-                if(!board.isFull() && game_mode.value !== "pvp"){
+                if(current_player === 1 && game_mode.value !== "pvp"){
                     _aiPlayRound();
                 }
             });
@@ -229,13 +285,18 @@ let GameController = (function(view, html, board){
                 players[0] = _makePlayer(`Player ${player_marks[0].value}` , player_marks[0].value);
                 players[1] = _makePlayer(`Player ${player_marks[1].value}` , player_marks[1].value);
                 current_player = _randomInt(0, 1);
+                switch (game_mode.value) {
+                    case "pva":
+                        _aiPlayRound = _simpleAI;
+                        break;
+                    case "pvi":
+                        _aiPlayRound = _imposibleAI;
+                        break;
+                }
 
-                if(game_mode.value === "pvi"){
-                    _aiPlayRound = imposibleAI;
-                    _aiPlayRound();
-                } else if (game_mode.value === "pva"){
-                    _aiPlayRound = simpleAI;
-                    _aiPlayRound();
+                if(game_mode.value !== "pvp") {
+                    info_sign.textContent = "MAKE YOUR NEXT MOVE";
+                    if(current_player === 1) { _aiPlayRound();}
                 } else {
                     info_sign.textContent = `It ${players[current_player].name}'s turn.`;
                 }
